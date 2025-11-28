@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Dashboard de Ventas</title>
+  <!-- Bootstrap y Animate.css -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css"/>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-dark text-light">
+
+  <div class="container py-5">
+    <!-- Encabezado -->
+    <h1 class="text-center mb-4 animate__animated animate__fadeInDown">📊 Dashboard de Ventas</h1>
+    <p class="text-center fs-5">Modelo Poisson con λ = <span class="text-warning">{{ lambda_poisson|round(2) }}</span></p>
+
+    <!-- Tarjetas de métricas -->
+    <div class="row text-center mb-5">
+      <div class="col-md-4">
+        <div class="card shadow-lg border-info">
+          <div class="card-body">
+            <h5 class="card-title text-info">MAE</h5>
+            <p class="card-text fs-4">{{ mae }}</p>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="card shadow-lg border-success">
+          <div class="card-body">
+            <h5 class="card-title text-success">RMSE</h5>
+            <p class="card-text fs-4">{{ rmse }}</p>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="card shadow-lg border-warning">
+          <div class="card-body">
+            <h5 class="card-title text-warning">MAPE</h5>
+            <p class="card-text fs-4">{{ mape }}%</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Gráfico comparativo noviembre -->
+    <div class="bg-dark rounded shadow-lg p-4 mb-5">
+      <h3 class="text-center mb-3">📈 Ventas Reales vs Predicciones (Noviembre)</h3>
+      <canvas id="noviembreChart" height="100"></canvas>
+    </div>
+
+    <!-- Ventas históricas -->
+    <div class="bg-dark rounded shadow-lg p-4">
+      <h3 class="text-center mb-4">📜 Ventas Históricas</h3>
+      <div class="text-center mb-3">
+        <label for="mesSelect" class="form-label">Selecciona el mes:</label>
+        <select id="mesSelect" class="form-select w-auto d-inline-block bg-secondary text-light border-info">
+          <option value="sep">Septiembre</option>
+          <option value="oct">Octubre</option>
+          <option value="nov">Noviembre</option>
+        </select>
+      </div>
+      <canvas id="historicasChart" height="80" class="mb-4"></canvas>
+      <table class="table table-dark table-striped text-center mt-4" id="ventasTable">
+        <thead class="table-info">
+          <tr>
+            <th>Fecha</th>
+            <th>Unidades</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    // Datos de noviembre
+    const fechasNov = {{ fechas_nov|tojson }};
+    const predicciones = {{ predicciones|tojson }};
+    const realesNov = {{ reales|tojson }};
+
+    const ctxNov = document.getElementById('noviembreChart').getContext('2d');
+    new Chart(ctxNov, {
+      type: 'line',
+      data: {
+        labels: fechasNov,
+        datasets: [
+          {
+            label: 'Ventas reales Noviembre',
+            data: realesNov,
+            borderColor: '#00bfff',
+            backgroundColor: 'rgba(0, 191, 255, 0.3)',
+            fill: true,
+            tension: 0.4
+          },
+          {
+            label: 'Predicciones Noviembre',
+            data: predicciones,
+            borderColor: '#ff4d88',
+            backgroundColor: 'rgba(255, 77, 136, 0.3)',
+            fill: true,
+            tension: 0.4
+          }
+        ]
+      },
+      options: {
+        plugins: { legend: { labels: { color: '#fff' } } },
+        scales: { 
+          x: { ticks: { color: '#fff' } },
+          y: { ticks: { color: '#fff' }, beginAtZero: true }
+        }
+      }
+    });
+
+    // Ventas históricas dinámicas
+    const ventasSep = {{ ventas_sep|tojson }};
+    const ventasOct = {{ ventas_oct|tojson }};
+    const ventasNov = {{ ventas_nov|tojson }};
+
+    const ctxHist = document.getElementById('historicasChart').getContext('2d');
+    let historicasChart = new Chart(ctxHist, {
+      type: 'bar',
+      data: {
+        labels: ventasSep.map(v => v.Fecha),
+        datasets: [{
+          label: 'Ventas Septiembre',
+          data: ventasSep.map(v => v.Unidades),
+          backgroundColor: 'rgba(0, 191, 255, 0.7)',
+          borderRadius: 6
+        }]
+      },
+      options: {
+        plugins: { legend: { labels: { color: '#fff' } } },
+        scales: { 
+          x: { ticks: { color: '#fff' } },
+          y: { ticks: { color: '#fff' }, beginAtZero: true }
+        }
+      }
+    });
+
+    function cargarTabla(datos) {
+      const tbody = document.querySelector("#ventasTable tbody");
+      tbody.innerHTML = "";
+      datos.forEach(row => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td>${row.Fecha}</td><td>${row.Unidades}</td>`;
+        tbody.appendChild(tr);
+      });
+    }
+
+    // Inicial: septiembre
+    cargarTabla(ventasSep);
+
+    document.getElementById("mesSelect").addEventListener("change", function() {
+      let datos, label, color;
+      if (this.value === "sep") {
+        datos = ventasSep;
+        label = "Ventas Septiembre";
+        color = 'rgba(0, 191, 255, 0.7)';
+      } else if (this.value === "oct") {
+        datos = ventasOct;
+        label = "Ventas Octubre";
+        color = 'rgba(75, 192, 192, 0.7)';
+      } else {
+        datos = ventasNov;
+        label = "Ventas Noviembre";
+        color = 'rgba(255, 215, 0, 0.7)';
+      }
+
+      cargarTabla(datos);
+      historicasChart.data.labels = datos.map(v => v.Fecha);
+      historicasChart.data.datasets[0].data = datos.map(v => v.Unidades);
+      historicasChart.data.datasets[0].label = label;
+      historicasChart.data.datasets[0].backgroundColor = color;
+      historicasChart.update();
+    });
+  </script>
+</body>
+</html>
